@@ -1,0 +1,10 @@
+[package]
+name = "rloris"
+version = "0.1.0"
+authors = ["SilverWingedSeraph <lfstindall@gmail.com>"]
+
+[dependencies]
+rustc-serialize = "0.3"
+docopt = "0.7"
+openssl = "0.9"
+
