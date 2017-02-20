@@ -165,9 +165,19 @@ fn main() {
                 })
             );
         }
-        for handle in handles {
-            let val = handle.join();
+
+        if threads > 1 {
+            for handle in handles {
+                match handle.join() {
+                    Ok(_) => print!("."),
+                    Err(_) => print!("x")
+                };
+            }
+        } else {
+            // In this case there is only one thread. Pop it, join it, and suppress errors.
+            handles.pop().unwrap().join().unwrap_or_else(|_| {()} );
         }
+        println!();
         if !repeat {break;}
     }
 }
