@@ -8,6 +8,8 @@ You can download the source code and build it - you'll need:
 * a working Rust compiler, stable/beta/nightly all work
 * `pkg-config`
 
+You can also download a working binary for Linux x64 from the [releases directory](https://github.com/SilverWingedSeraph/rloris/releases).
+
 ## Attacks
 
 * SlowLoris GET, based on [RSnake's original attack](https://web.archive.org/web/20090822001255/http://ha.ckers.org/slowloris/), simply opens a lot of connections
