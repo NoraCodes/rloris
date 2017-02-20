@@ -5,7 +5,7 @@ Currently it only supports SlowLoris - other attacks are coming!
 
 ## Attacks
 
-* SlowLoris GET, based on [RSnake's original attack](https://en.wikipedia.org/wiki/Slowloris_(computer_security)), simply opens a lot of connections
+* SlowLoris GET, based on [RSnake's original attack](https://web.archive.org/web/20090822001255/http://ha.ckers.org/slowloris/), simply opens a lot of connections
     asking to GET resources and then takes its time sending the other headers and the final double `\r\n`. This is the default.
 * SlowLoris POST, similar to the above but using POST requests. Activate with `--post`.
 
