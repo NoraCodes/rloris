@@ -18,7 +18,6 @@ rloris - SlowLoris and other Slow HTTP DoSes in Rust
 Usage:
     rloris <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--cycles=<cycles>] [--domain=<domain>] [--nofinalize] [--repeat] [--threads=<threads>] [--post]
     rloris (-h | --help)
-    rloris --version
 
 Options:
     -h --help       Show this screen.
