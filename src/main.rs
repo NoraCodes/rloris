@@ -42,7 +42,6 @@ struct Args {
     flag_domain: Option<String>,
     flag_repeat: bool,
     flag_threads: usize,
-    flag_version: bool,
     flag_post: bool
 }
 
