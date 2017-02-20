@@ -30,6 +30,9 @@ The more threads you can get away with, the higher the impact on the target. To 
 keep raising the number of threads until you get "Connection reset by peer" errors; at that point, your server is dropping connections due to over-load.
 Note that a DoS condition probably will arise before this happens.
 
+`rloris` uses `env_logger` to log messages to the console; set the environment variable `RUST_LOG` to `info` for additional data about your attacks, or `debug` if you're 
+hacking on the code.
+
 ### Examples
 
 * Perform an attack in plaintext against localhost: `rloris localhost`

