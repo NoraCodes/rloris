@@ -169,12 +169,12 @@ fn main() {
                     Ok(_) => print!("."),
                     Err(_) => print!("x")
                 };
+                println!();
             }
         } else {
             // In this case there is only one thread. Pop it, join it, and suppress errors.
             handles.pop().unwrap().join().unwrap_or_else(|_| {()} );
         }
-        println!();
         if !repeat {break;}
     }
 }
