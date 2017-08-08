@@ -3,6 +3,7 @@ extern crate rustc_serialize;
 extern crate openssl;
 #[macro_use] extern crate log;
 extern crate env_logger;
+extern crate num_cpus;
 
 use docopt::Docopt;
 use std::net::TcpStream;
@@ -29,7 +30,7 @@ Options:
     --cycles=C      Total number of additional \"keepalive\" headers to be sent. [default: 10]
     --domain=D      Override the domain name for SSL connections (e.g., if you're connecting to a raw IP address)
     --repeat        Perform the attack repeatedly (WARNING - Can produce a DoS condition!)
-    --threads=T     The number of concurrent threads to spin off. [default: 1]
+    --threads=T     The number of concurrent threads to spin off. Defaults to the number of CPUs.
 ";
 
 #[derive(Debug, RustcDecodable)]
@@ -42,7 +43,7 @@ struct Args {
     flag_nofinalize: bool,
     flag_domain: Option<String>,
     flag_repeat: bool,
-    flag_threads: usize,
+    flag_threads: Option<usize>,
     cmd_get: bool,
     cmd_post: bool
 }
@@ -87,7 +88,7 @@ fn main() {
     let cycles = args.flag_cycles;
     let timeout = args.flag_timeout;
     let repeat = args.flag_repeat;
-    let threads = args.flag_threads;
+    let threads = args.flag_threads.unwrap_or(num_cpus::get());
     let ssl = args.flag_ssl;
     let cmd_get = args.cmd_get;
     let cmd_post = args.cmd_post;
