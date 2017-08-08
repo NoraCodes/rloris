@@ -1,6 +1,6 @@
 # rloris
 
-`rloris` is an implementation of RSnake's SlowLoris attack and the SlowRead attack in Rust, with other attacks on the way.
+`rloris` is an implementation of RSnake's SlowLoris attack in Rust, with other attacks on the way.
 
 You can download the source code and build it - you'll need: 
 * the OpenSSL or LibreSSL dev headers
@@ -13,13 +13,12 @@ You can also download a working binary for Linux x64 from the [releases director
 
 * SlowLoris GET, based on [RSnake's original attack](https://web.archive.org/web/20090822001255/http://ha.ckers.org/slowloris/), simply opens a lot of connections
     asking to GET resources and then takes its time sending the other headers and the final double `\r\n`.
-* SlowLoris POST, similar to the above but using POST requests. Activate with `rloris loris <target> --post`.
-* SlowRead, which connects to the server and tries to read bytes slowly, tying up a connection (depending on the underlying OS).
+* SlowLoris POST, similar to the above but using POST requests. Activate with `rloris post <target> --post`.
 
 ## Functionality
 
 Optional functionality is available by giving flags to the `rloris` binary. Currently, `rloris` supports SSL (`-ssl`), 
-setting custom timeouts for SlowLoris and SlowRead (`--timeout=<timeout>`) and SlowLoris cycle counts (`--cycle=<cycles>`),
+setting custom timeouts for SlowLoris (`--timeout=<timeout>`) and SlowLoris cycle counts (`--cycle=<cycles>`),
 multithreading (`--thread=<threads>`), and infinite repetition (`--repeat`). 
 
 WARNING: using `--repeat` can create a real honest to goodness DoS condition on the target!
@@ -35,7 +34,6 @@ hacking on the code.
 
 ### Examples
 
-* Perform an attack against localhost, port 8000, using the POST verb: `rloris loris localhost --port=8000 --post`
-* Perform an SSL attack against example.com, port 443: `rloris loris example.com --ssl`
-* Perform an SSL attack against 127.0.0.1, with domain name example.com: `rloris loris 127.0.0.1 --ssl --domain=example.com --repeat`
-* Perform a parallelized SlowRead attack against localhost, trying for 1000 connections: `rloris read localhost --threads 1000`
+* Perform an attack against localhost, port 8000, using the POST verb: `rloris post localhost --port=8000`
+* Perform an SSL attack against example.com, port 443: `rloris get example.com --ssl`
+* Perform an SSL attack against 127.0.0.1, with domain name example.com: `rloris get 127.0.0.1 --ssl --domain=example.com --repeat`
