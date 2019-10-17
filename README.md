@@ -2,12 +2,7 @@
 
 `rloris` is an implementation of RSnake's SlowLoris attack in Rust, with other attacks on the way.
 
-You can download the source code and build it - you'll need: 
-* the OpenSSL or LibreSSL dev headers
-* a working Rust compiler, stable/beta/nightly all work
-* `pkg-config`
-
-You can also download a working binary for Linux x64 from the [releases directory](https://github.com/SilverWingedSeraph/rloris/releases).
+You can either build `rloris` yourself with `cargo` or download a working binary for Linux x64 from the [releases directory](https://github.com/SilverWingedSeraph/rloris/releases). As of `0.6.0`, `rloris` no longer requires native SSL libraries and uses `rustls` to perform all TLS connection in pure Rust.
 
 ## Attacks
 
